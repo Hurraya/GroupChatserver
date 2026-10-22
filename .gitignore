@@ -1,0 +1,17 @@
+# 忽略所有编译生成的文件
+*.obj
+*.exe
+*.ilk
+*.pdb
+*.o
+*.out
+
+# 忽略 Visual Studio 的隐藏缓存文件夹
+.vs/
+Debug/
+Release/
+x64/
+x86/
+
+# 忽略 VS Code 的配置文件夹
+.vscode/
