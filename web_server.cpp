@@ -1,6 +1,7 @@
 #include<iostream>
 #include<string>
 #include<sstream>
+#include<thread>
 #ifdef _WIN32
     #include<winsock2.h>
     #pragma comment(lib, "ws2_32.lib")
@@ -10,44 +11,72 @@
     #include<unistd.h>
 #endif
 
-// 处理HTTP请求并返回响应报文
-std::string handleRequest(const std::string& request){
-    // 1.判断是 GET 还是 POST
-    if (request.find("GET / ") == 0){
-        // 返回带有表单的HTML文件
-        std::string html = 
-        "<html><head><meta charset='utf-8'></head><body>"
-        "<h1 style='color:bule;'>Welcom to c++ Server</h1>"
-        "<form action='/submit' method='POST'>"
-        " <label>please input your name:</label>"
-        " <input type='text' name='username' required>"
-        " <button type='submit'> submit to C++ server</button>"
-        "</form>"
-        "</body></html>";
+// 处理客户端(把recv也包装进去)
+void handleClient(int client_socket){
 
-        return "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/html; charset=utf-8\r\n"
-        "Content-Length: " + std::to_string(html.length()) + "\r\n"
-        "connection: close\r\n\r\n" + html;
-    }else if (request.find("POST /submit" ) == 0){
+    char buffer[4096] = {0};
+    
+    // 接收浏览器的数据（阻塞）
+    int bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
+    if (bytes_received > 0){
 
-        // 解析post的请求 Body（例如username=张三）
-        size_t pos = request.find("\r\n\r\n");  // 这是body部分前的字符串
-        if (pos != std::string::npos){
-            std::string body  = request.substr(pos + 4);
-            std::cout << "[data of recived web form]: " << body << std::endl;
+        std::string request(buffer);
+
+        if (request.find("favicon.ico") == std::string::npos){
+
+            // 1.判断是 GET 还是 POST
+            if (request.find("GET / ") == 0){
+                // 返回带有表单的HTML文件
+                std::string html = 
+                "<html><head><meta charset='utf-8'></head><body>"
+                "<h1 style='color:blue;'>Welcom to c++ Server</h1>"
+                "<form action='/submit' method='POST'>"
+                " <label>please input your name:</label>"
+                " <input type='text' name='username' required>"
+                " <button type='submit'> submit to C++ server</button>"
+                "</form>"
+                "</body></html>";
+
+                std::string response =  "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/html; charset=utf-8\r\n"
+                "Content-Length: " + std::to_string(html.length()) + "\r\n"
+                "Connection: close\r\n\r\n" + html;
+
+                send(client_socket, response.c_str(), response.length(),0);
+
+            }else if (request.find("POST /submit" ) == 0){
+
+                // 解析post的请求 Body（例如username=张三）
+                size_t pos = request.find("\r\n\r\n");  // 这是body部分前的字符串
+                if (pos != std::string::npos){
+                    std::string body  = request.substr(pos + 4);
+                    std::cout << "[processe " << std::this_thread::get_id() <<"] form: " << body << std::endl;
+                }
+
+                // 返回一个成功画面
+                std::string html = "<html><head><meta charset='utf-8'></head><body><h1>successfull submit!!please look at console</h1></body></html>";
+                std::string response =  "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/html; charset=utf-8\r\n"
+                "Content-Length: " + std::to_string(html.length()) + "\r\n"
+                "connection: close\r\n\r\n" + html;
+                send(client_socket, response.c_str(), response.length(),0);
+
+            }
+            else{ // 找不到页面
+            std::string response =  "HTTP/1.1 404 Not Found\r\n\r\n";
+            send(client_socket, response.c_str(), response.length(),0);
         }
 
-        // 返回一个成功画面
-        std::string html = "<html><head><meta charset='utf-8'></head><body><h1>successfull submit!!please look at console</h1></body></html>";
-        return "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/html; charset=utf-8\r\n"
-        "Content-Length: " + std::to_string(html.length()) + "\r\n"
-        "connection: close\r\n\r\n" + html;
+           
     }
-
-    // 找不到页面
-    return "HTTP/1.1 404 Not Found\r\n\r\n";
+    }
+// 处理完毕，关闭该客户端的连接
+#ifdef _WIN32
+    closesocket(client_socket);
+#else
+    close(client_socket);
+#endif
+    
 }
 
 int main(){
@@ -67,40 +96,16 @@ int main(){
         return 1;
     }
     listen(server_fd, 10);
-    std::cout << " web server start working, please visit http://localhost:8080 in browser\n";
+    std::cout << " multithreading web server start working, please visit http://localhost:8080 in browser\n";
 
     while(true){
+        std::cout << "waitting to connect new client...\n";
         int client_socket = accept(server_fd, nullptr, nullptr);  // blocking
+        std::cout << "recieved new client, giving socket [" << client_socket << "]. start subthread to hanfdle\n";
 
-        // 1.接受浏览器的请求报文（随便读一下）
-        char buffer[4090] = {0};
-        recv(client_socket, buffer, sizeof(buffer) - 1, 0);
-        // std::cout << "recieve the request from browser: \n" << buffer << "\n";
-
-        std::string request(buffer);
-
-        // 忽略 favicon
-        if (request.find("favicon.ico") != std::string::npos){
-#ifdef _WIN32
-            closesocket(client_socket);
-#else
-            close(client_socket);
-#endif
-            continue;
-
-        }
-
-        // 交给handle，拿到响应报文
-        std::string response = handleRequest(request);
-        send(client_socket, response.c_str(), response.length(), 0);
-
-
-        // 4.关闭这次连接
-#ifdef _WIN32
-        closesocket(client_socket);
-#else
-        close(client_socket);
-#endif
+       // 把具体的处理任务丢给子线程，然后立刻让他自己飞（detach）
+       std::thread worker(handleClient, client_socket);
+        worker.detach();
 
     }
     return 0;
