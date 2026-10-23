@@ -53,7 +53,7 @@ void handleClient(int client_socket){
             {
                 std::lock_guard<std::mutex> lock(mtx);
                 auto it = std::remove(clients.begin(), clients.end(), client_socket);
-                clients.erase(it, clients.end());           // remove之后要 erase
+                clients.erase(it, clients.end());           // remove只是对数据搬运，erase做真正的删除
 
             }// 锁在这里释放（出作用域就释放）
 
@@ -116,6 +116,9 @@ int main(){
 #ifdef _WIN32
     closesocket(server_fd);
     WSACleanup();
+#else
+    /* 服务器这里是一个死循环，一般不会终止，除非是按了CTRL+C强制终止。Linux系统会自动回收这个进程的所有资源（包括文件描述符）*/
+    close(server_fd);   
 #endif 
     return 0;
 }
