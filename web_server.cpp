@@ -2,6 +2,7 @@
 #include<string>
 #include<sstream>
 #include<thread>
+#include"ThreadPool.h"
 #ifdef _WIN32
     #include<winsock2.h>
     #pragma comment(lib, "ws2_32.lib")
@@ -98,15 +99,17 @@ int main(){
     listen(server_fd, 10);
     std::cout << " multithreading web server start working, please visit http://localhost:8080 in browser\n";
 
+    // 初始化线程池
+    ThreadPool pool(4);
+    std::cout << "treadPool start, we have 4 thread...\n";
+
     while(true){
         std::cout << "waitting to connect new client...\n";
         int client_socket = accept(server_fd, nullptr, nullptr);  // blocking
-        std::cout << "recieved new client, giving socket [" << client_socket << "]. start subthread to hanfdle\n";
+        std::cout << "recieved new request, giving socket [" << client_socket << "]. and throw in the queue\n";
 
-       // 把具体的处理任务丢给子线程，然后立刻让他自己飞（detach）
-       std::thread worker(handleClient, client_socket);
-        worker.detach();
-
+      // 把任务扔进线程池，不再创建新线程！
+      pool.enqueue(handleClient, client_socket);
     }
     return 0;
 }
